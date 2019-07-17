@@ -1,0 +1,16 @@
+config.dev.json
+
+.idea/
+*.sublime-project
+*.sublime-workspace
+
+**/bin/
+**/obj/
+*.suo
+**/packages/
+*.csproj.user
+*.zip
+*.tar.gz
+*.tar
+*.mmdb
+*.sln.DotSettings.user
