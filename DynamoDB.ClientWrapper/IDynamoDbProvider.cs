@@ -5,6 +5,12 @@ namespace DynamoDB.ClientWrapper
     
     public interface IDynamoDbProvider
     {
+        Task PutItemAsync<T>(string tableName, T item);
+
+        Task PutItemAsync<T>(string tableName, T item, string checkUniqueKey);
+        
         Task PutItemAsync<T>(string tableName, T item, IEnumerable<string> checkUniqueKeys);
+
+        Task<IEnumerable<TObject>> GetBatchItemsAsync<TObject, TKey>(string tableName, string keyName, IEnumerable<TKey> keyValues);
     }
 }
