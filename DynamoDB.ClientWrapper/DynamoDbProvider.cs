@@ -52,33 +52,31 @@
             catch (ConditionalCheckFailedException e)
             {
                 throw new DuplicateKeyException(
-                    $"Throw duplicated key(s) ({string.Join(", ", checkUniqueKeys)}) exception while putting item to the {tableName}",
+                    $"The source '{tableName}' has already contained data with key '{string.Join(", ", checkUniqueKeys)}'.",
                     e);
             }
             catch (ResourceNotFoundException e)
             {
                 throw new TableNameFailException(
-                    $"Not found the table {tableName}.",
+                    $"Not found the source '{tableName}'.",
                     e);
             }
             catch (AmazonDynamoDBException e)
             {
                 throw new PrimaryKeyNameFailException(
-                    $"Not found the primary key in data.",
+                    $"Not found the primary key in saving data.",
                     e);
             }
             catch (Exception e)
             {
                 throw new SaveDataException(
-                    $"Was happen unexpected exception while putting item to the {tableName}", 
+                    $"Was happened unexpected error while saving data in the source '{tableName}'", 
                     e);
             }
         }
 
         public async Task<IEnumerable<TObject>> GetBatchItemsAsync<TObject, TKey>(string tableName, string keyName, IEnumerable<TKey> keyValues)
         {
-            var resultItems = new List<TObject>();
-            
             var request = new BatchGetItemRequest();
             request.RequestItems = new Dictionary<string, KeysAndAttributes>
             {
@@ -110,29 +108,42 @@
             catch (ResourceNotFoundException e)
             {
                 throw new TableNameFailException(
-                    $"Not found the table {tableName}.",
+                    $"Not found the source '{tableName}'.",
                     e);
             }
             catch (AmazonDynamoDBException e)
             {
                 throw new PrimaryKeyNameFailException(
-                    $"Not found the primary key {keyName}.",
+                    $"Not found the primary key '{keyName}' in the source '{tableName}'.",
                     e);
             }
             catch (Exception e)
             {
                 throw new GetDataException(
-                    $"Was happen unexpected exception while retrieving item from the {tableName}", 
+                    $"Was happened unexpected error while retrieving data from the source '{tableName}'", 
                     e);
             }
             
             var items = response.Responses[tableName];
-
+            var resultItems = new List<TObject>();
+            
             foreach (var item in items)
             {
                 var document = Document.FromAttributeMap(item);
                 var jsonData = document.ToJson();
-                var data = JsonConvert.DeserializeObject<TObject>(jsonData);
+                TObject data;
+                
+                try
+                {
+                    data = JsonConvert.DeserializeObject<TObject>(jsonData);
+                }
+                catch(JsonReaderException e)
+                {
+                    throw new IncorrectDataFormatException(
+                        $"'{typeof(TObject).Name}' and object '{jsonData}' have a different data format", 
+                        e);
+                }
+                
                 resultItems.Add(data);
             }
 

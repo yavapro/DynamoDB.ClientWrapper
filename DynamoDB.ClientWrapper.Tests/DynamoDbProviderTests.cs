@@ -150,5 +150,26 @@ namespace DynamoDB.ClientWrapper.Tests
                 () =>
                     target.GetBatchItemsAsync<TestData, int>(tableName, "NotExistsKey", new int[] { 0 }));
         }
+        
+        [Fact]
+        public async Task GetBatchItemsAsync_FailKeyName2_Test()
+        {
+            var data = new TestData
+            {
+                Id = Guid.NewGuid().GetHashCode(),
+                Value = Guid.NewGuid().GetHashCode()
+            };
+            
+            await target.PutItemAsync(tableName, data);
+            
+            await Assert.ThrowsAsync<IncorrectDataFormatException>(
+                () =>
+                    target.GetBatchItemsAsync<Data, int>(tableName, primaryKeyName, new int[] { data.Id }));
+        }
+        
+        private class Data
+        {
+            public DateTime Value { get; set; }
+        }
     }
 }
