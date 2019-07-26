@@ -81,25 +81,6 @@ namespace DynamoDB.ClientWrapper.Tests
         }
         
         [Fact]
-        public async Task PutItemAsync_FailServiceEndpoint_Test()
-        {
-            var clientConfig = new AmazonDynamoDBConfig();
-            clientConfig.ServiceURL = "http://localhost:1000";
-            var client = new AmazonDynamoDBClient(clientConfig);
-            var provider = new DynamoDbProvider(client);
-            
-            var data = new TestData
-            {
-                Id = Guid.NewGuid().GetHashCode(),
-                Value = Guid.NewGuid().GetHashCode()
-            };
-            
-            await Assert.ThrowsAsync<SaveDataException>(
-                () =>
-                    provider.PutItemAsync(tableName, data));
-        }
-        
-        [Fact]
         public async Task GetBatchItemsAsync_CheckEmptyResult_Test()
         {
             var data = new TestData

@@ -1,4 +1,6 @@
-﻿namespace DynamoDB.ClientWrapper
+﻿using System.Net.Http;
+
+namespace DynamoDB.ClientWrapper
 {
     using System;
     using System.Linq;
@@ -63,15 +65,12 @@
             }
             catch (AmazonDynamoDBException e)
             {
-                throw new PrimaryKeyNameFailException(
-                    $"Not found the primary key in saving data.",
-                    e);
-            }
-            catch (Exception e)
-            {
-                throw new SaveDataException(
-                    $"Was happened unexpected error while saving data in the source '{tableName}'", 
-                    e);
+                if (e.ErrorCode == "ValidationException")
+                {
+                    throw new PrimaryKeyNameFailException(
+                        $"Not found the primary key in saving data.",
+                        e);
+                }
             }
         }
 
