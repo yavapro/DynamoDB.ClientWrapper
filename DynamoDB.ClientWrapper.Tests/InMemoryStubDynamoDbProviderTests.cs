@@ -1,28 +1,23 @@
 namespace DynamoDB.ClientWrapper.Tests
 {
-    using Amazon.DynamoDBv2;
-    using Microsoft.Extensions.Configuration;
-    
     using FluentAssertions;
     
     using System;
+    using System.Collections.Generic;
     using System.Linq;
     using System.Threading.Tasks;
     
     using Xunit;
     
-    public class DynamoDbProviderTests
+    public class InMemoryStubDynamoDbProviderTests
     {
-        private readonly DynamoDbProvider target;
+        private readonly InMemoryStubDynamoDbProvider target;
         private const string tableName = "Test";
         private const string primaryKeyName = "Id";
 
-        public DynamoDbProviderTests()
+        public InMemoryStubDynamoDbProviderTests()
         {
-            var awsOptions = Configuration.Current.GetAWSOptions();
-            var dynamoDbClient = awsOptions.CreateServiceClient<IAmazonDynamoDB>();
-            
-            target = new DynamoDbProvider(dynamoDbClient);
+            target = new InMemoryStubDynamoDbProvider(tableName, new Dictionary<string, string>());
         }
 
         [Fact]
@@ -121,15 +116,6 @@ namespace DynamoDB.ClientWrapper.Tests
             await Assert.ThrowsAsync<TableNameFailException>(
                 () =>
                     target.GetBatchItemsAsync<TestData, int>(Guid.NewGuid().ToString(), primaryKeyName, new int[] { 0 }));
-        }
-        
-        [Fact]
-        public async Task GetBatchItemsAsync_FailKeyName_Test()
-        {
-            
-            await Assert.ThrowsAsync<PrimaryKeyNameFailException>(
-                () =>
-                    target.GetBatchItemsAsync<TestData, int>(tableName, "NotExistsKey", new int[] { 0 }));
         }
         
         [Fact]

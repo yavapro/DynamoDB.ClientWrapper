@@ -1,4 +1,5 @@
 ﻿using System.Net.Http;
+using System.Reflection;
 
 namespace DynamoDB.ClientWrapper
 {
@@ -20,31 +21,17 @@ namespace DynamoDB.ClientWrapper
         {
             this.dynamoDBClient = dynamoDBClient;
         }
-        
-        public async Task PutItemAsync<T>(string tableName, T item)
-        {
-            await PutItemAsync(tableName, item, (IEnumerable<string>) null);
-        }
 
-        public async Task PutItemAsync<T>(string tableName, T item, string checkUniqueKey)
-        {
-            await PutItemAsync(tableName, item, new []{ checkUniqueKey });
-        }
-
-        public async Task PutItemAsync<T>(string tableName, T item, IEnumerable<string> checkUniqueKeys)
+        public async Task PutItemAsync<T>(string tableName, string keyName, T item, bool checkUniqueKey = false)
         {
             var jsonData = JsonConvert.SerializeObject(item);
             var document = Document.FromJson(jsonData);
 
             var request = new PutItemRequest(tableName, document.ToAttributeMap());
             
-            if (checkUniqueKeys != null && checkUniqueKeys.Any())
+            if (checkUniqueKey)
             {
-                var keys = string.Join(
-                    " AND ", 
-                    checkUniqueKeys.Select(s => $"attribute_not_exists({s})")
-                );
-                request.ConditionExpression = $"{keys}";
+                request.ConditionExpression = $"attribute_not_exists({keyName})";
             }
 
             try
@@ -54,7 +41,7 @@ namespace DynamoDB.ClientWrapper
             catch (ConditionalCheckFailedException e)
             {
                 throw new DuplicateKeyException(
-                    $"The source '{tableName}' has already contained data with key '{string.Join(", ", checkUniqueKeys)}'.",
+                    $"The source '{tableName}' has already contained data with key '{keyName}'.",
                     e);
             }
             catch (ResourceNotFoundException e)
@@ -112,15 +99,12 @@ namespace DynamoDB.ClientWrapper
             }
             catch (AmazonDynamoDBException e)
             {
-                throw new PrimaryKeyNameFailException(
-                    $"Not found the primary key '{keyName}' in the source '{tableName}'.",
-                    e);
-            }
-            catch (Exception e)
-            {
-                throw new GetDataException(
-                    $"Was happened unexpected error while retrieving data from the source '{tableName}'", 
-                    e);
+                if (e.ErrorCode == "ValidationException")
+                {
+                    throw new PrimaryKeyNameFailException(
+                        $"Not found the primary key '{keyName}' in the source '{tableName}'.",
+                        e);
+                }
             }
             
             var items = response.Responses[tableName];
