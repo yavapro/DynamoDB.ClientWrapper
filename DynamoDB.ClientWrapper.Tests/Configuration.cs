@@ -2,7 +2,6 @@ namespace DynamoDB.ClientWrapper.Tests
 {
     using System.IO;
     using System.Reflection;
-
     using Microsoft.Extensions.Configuration;
 
     internal class Configuration
@@ -15,13 +14,14 @@ namespace DynamoDB.ClientWrapper.Tests
             {
                 if (configuration == null)
                 {
-                    configuration = GetIConfigurationRoot(Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location));
+                    configuration =
+                        GetIConfigurationRoot(Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location));
                 }
-                
+
                 return configuration;
             }
         }
-        
+
         private static IConfigurationRoot GetIConfigurationRoot(string outputPath)
         {
             return new ConfigurationBuilder()

@@ -1,68 +1,95 @@
-﻿using System.Net.Http;
-using System.Reflection;
-
-namespace DynamoDB.ClientWrapper
+﻿namespace DynamoDB.ClientWrapper
 {
-    using System;
     using System.Linq;
     using System.Threading.Tasks;
     using Amazon.DynamoDBv2;
     using Amazon.DynamoDBv2.Model;
-    
     using System.Collections.Generic;
     using Amazon.DynamoDBv2.DocumentModel;
     using Newtonsoft.Json;
-    
+
     public class DynamoDbProvider : IDynamoDbProvider
     {
         private readonly IAmazonDynamoDB dynamoDBClient;
-        
+
         public DynamoDbProvider(IAmazonDynamoDB dynamoDBClient)
         {
             this.dynamoDBClient = dynamoDBClient;
         }
 
-        public async Task PutItemAsync<T>(string tableName, string keyName, T item, bool checkUniqueKey = false)
+        public async Task PutItemAsync(string tableName, object item, bool checkUniqueKey = false)
         {
             var jsonData = JsonConvert.SerializeObject(item);
             var document = Document.FromJson(jsonData);
+            Table table;
 
-            var request = new PutItemRequest(tableName, document.ToAttributeMap());
-            
+            try
+            {
+                table = Table.LoadTable(dynamoDBClient, tableName);
+            }
+            catch (ResourceNotFoundException e)
+            {
+                throw new TableNameFailException($"Not found the source '{tableName}'.", e);
+            }
+
+            foreach (var k in table.Keys)
+            {
+                if (!document.ContainsKey(k.Key))
+                {
+                    throw new PrimaryKeyNameFailException($"Not found the primary key '{k.Key}' in saving data.", null);
+                }
+            }
+
+            var keys = table.Keys.Select(k => k.Key).ToArray();
+
+            var config = new PutItemOperationConfig();
+
             if (checkUniqueKey)
             {
-                request.ConditionExpression = $"attribute_not_exists({keyName})";
+                config.ConditionalExpression = new Expression
+                {
+                    ExpressionStatement = string.Join(" && ", keys.Select(k => $"attribute_not_exists({k})"))
+                };
             }
 
             try
             {
-                await dynamoDBClient.PutItemAsync(request);
+                await table.PutItemAsync(document, config);
             }
             catch (ConditionalCheckFailedException e)
             {
                 throw new DuplicateKeyException(
-                    $"The source '{tableName}' has already contained data with key '{keyName}'.",
+                    $"The source '{tableName}' has already contained data with keys '{string.Join(", ", keys)}'.",
                     e);
-            }
-            catch (ResourceNotFoundException e)
-            {
-                throw new TableNameFailException(
-                    $"Not found the source '{tableName}'.",
-                    e);
-            }
-            catch (AmazonDynamoDBException e)
-            {
-                if (e.ErrorCode == "ValidationException")
-                {
-                    throw new PrimaryKeyNameFailException(
-                        $"Not found the primary key in saving data.",
-                        e);
-                }
             }
         }
 
-        public async Task<IEnumerable<TObject>> GetBatchItemsAsync<TObject, TKey>(string tableName, string keyName, IEnumerable<TKey> keyValues)
+        public async Task<IEnumerable<TObject>> GetBatchItemsAsync<TObject>(string tableName, IEnumerable<object> keyValues)
         {
+            var keyValuesJsonData = keyValues.Select(JsonConvert.SerializeObject);
+            var keyValuesDocument = keyValuesJsonData.Select(Document.FromJson);
+            Table table;
+
+            try
+            {
+                table = Table.LoadTable(dynamoDBClient, tableName);
+            }
+            catch (ResourceNotFoundException e)
+            {
+                throw new TableNameFailException($"Not found the source '{tableName}'.", e);
+            }
+
+            foreach (var k in table.Keys)
+            {
+                foreach (var document in keyValuesDocument)
+                {
+                    if (!document.ContainsKey(k.Key))
+                    {
+                        throw new PrimaryKeyNameFailException($"Not found the primary key '{k.Key}' in query.", null);
+                    }
+                }
+            }
+
             var request = new BatchGetItemRequest();
             request.RequestItems = new Dictionary<string, KeysAndAttributes>
             {
@@ -70,95 +97,83 @@ namespace DynamoDB.ClientWrapper
                     tableName,
                     new KeysAndAttributes
                     {
-                        Keys = keyValues.Select(
-                            id =>
-                                new Dictionary<string, AttributeValue>
-                                {
-                                    { keyName, new AttributeValue
-                                    {
-                                        N = IsNumeric(typeof(TKey)) ? id.ToString() : null,
-                                        S = IsNumeric(typeof(TKey)) ? null : id.ToString()
-                                    } }
-                                }
-                        ).ToList()
+                        Keys = keyValuesDocument.Select(d => d.ToAttributeMap()).ToList()
                     }
                 }
             };
 
-            BatchGetItemResponse response = null; 
-            
-            try
-            {
-                response = await dynamoDBClient.BatchGetItemAsync(request);
-            }
-            catch (ResourceNotFoundException e)
-            {
-                throw new TableNameFailException(
-                    $"Not found the source '{tableName}'.",
-                    e);
-            }
-            catch (AmazonDynamoDBException e)
-            {
-                if (e.ErrorCode == "ValidationException")
-                {
-                    throw new PrimaryKeyNameFailException(
-                        $"Not found the primary key '{keyName}' in the source '{tableName}'.",
-                        e);
-                }
-            }
-            
+            BatchGetItemResponse response = await dynamoDBClient.BatchGetItemAsync(request);
+
             var items = response.Responses[tableName];
             var resultItems = new List<TObject>();
-            
+
             foreach (var item in items)
             {
                 var document = Document.FromAttributeMap(item);
                 var jsonData = document.ToJson();
                 TObject data;
-                
+
                 try
                 {
                     data = JsonConvert.DeserializeObject<TObject>(jsonData);
                 }
-                catch(JsonReaderException e)
+                catch (JsonReaderException e)
                 {
                     throw new IncorrectDataFormatException(
-                        $"'{typeof(TObject).Name}' and object '{jsonData}' have a different data format", 
+                        $"'{typeof(TObject).Name}' and object '{jsonData}' have a different data format",
                         e);
                 }
-                
+
                 resultItems.Add(data);
             }
 
             return resultItems;
         }
-        
-        private static bool IsNumeric(Type type)
+
+        public async Task UpdateItemAsync(string tableName, object item)
         {
-            if (type == null)
+            var jsonData = JsonConvert.SerializeObject(item);
+            var document = Document.FromJson(jsonData);
+            Table table;
+
+            try
             {
-                return false;
+                table = Table.LoadTable(dynamoDBClient, tableName);
+            }
+            catch (ResourceNotFoundException e)
+            {
+                throw new TableNameFailException($"Not found the source '{tableName}'.", e);
             }
 
-            var typeCode = Type.GetTypeCode(type);
-
-            switch (typeCode)
+            foreach (var k in table.Keys)
             {
-                case TypeCode.Byte:
-                case TypeCode.Decimal:
-                case TypeCode.Double:
-                case TypeCode.Int16:
-                case TypeCode.Int32:
-                case TypeCode.Int64:
-                case TypeCode.SByte:
-                case TypeCode.Single:
-                case TypeCode.UInt16:
-                case TypeCode.UInt32:
-                case TypeCode.UInt64:
-                    return true;
+                if (!document.ContainsKey(k.Key))
+                {
+                    throw new PrimaryKeyNameFailException($"Not found the primary key '{k.Key}' in saving data.", null);
+                }
             }
-            
-            return false;
+
+            var keys = table.Keys.Select(k => k.Key).ToArray();
+
+            var config = new UpdateItemOperationConfig
+            {
+                ConditionalExpression = new Expression
+                {
+                    ExpressionStatement = string.Join(" && ", keys.Select(k => $"attribute_exists({k})"))
+                },
+                ReturnValues = ReturnValues.None
+            };
+
+            try
+            {
+                await table.UpdateItemAsync(document, config);
+            }
+            catch (ConditionalCheckFailedException e)
+            {
+                throw new NotExistKeyException(
+                    $"The source '{tableName}' has not contained data with keys '{string.Join(", ", keys)}'.",
+                    e);
+            }
         }
     }
 }

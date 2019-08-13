@@ -2,9 +2,9 @@ namespace DynamoDB.ClientWrapper
 {
     using System;
 
-    public class DuplicateKeyException : Exception
+    public class NotExistKeyException : Exception
     {
-        public DuplicateKeyException(string message, Exception inner)
+        public NotExistKeyException(string message, Exception inner)
             : base(message, inner)
         {
         }
