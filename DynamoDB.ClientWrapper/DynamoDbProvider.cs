@@ -11,15 +11,22 @@
     public class DynamoDbProvider : IDynamoDbProvider
     {
         private readonly IAmazonDynamoDB dynamoDBClient;
+        private readonly JsonSerializerSettings serializerSettings;
 
         public DynamoDbProvider(IAmazonDynamoDB dynamoDBClient)
+            : this(dynamoDBClient, new JsonSerializerSettings())
+        {
+        }
+
+        public DynamoDbProvider(IAmazonDynamoDB dynamoDBClient, JsonSerializerSettings serializerSettings)
         {
             this.dynamoDBClient = dynamoDBClient;
+            this.serializerSettings = serializerSettings;
         }
 
         public async Task PutItemAsync(string tableName, object item, bool checkUniqueKey = false)
         {
-            var jsonData = JsonConvert.SerializeObject(item);
+            var jsonData = JsonConvert.SerializeObject(item, serializerSettings);
             var document = Document.FromJson(jsonData);
             Table table;
 
@@ -64,7 +71,8 @@
             }
         }
 
-        public async Task<IEnumerable<TObject>> GetBatchItemsAsync<TObject>(string tableName, IEnumerable<object> keyValues)
+        public async Task<IEnumerable<TObject>> GetBatchItemsAsync<TObject>(string tableName,
+            IEnumerable<object> keyValues)
         {
             var keyValuesJsonData = keyValues.Select(JsonConvert.SerializeObject);
             var keyValuesDocument = keyValuesJsonData.Select(Document.FromJson);
@@ -132,7 +140,7 @@
 
         public async Task UpdateItemAsync(string tableName, object item)
         {
-            var jsonData = JsonConvert.SerializeObject(item);
+            var jsonData = JsonConvert.SerializeObject(item, serializerSettings);
             var document = Document.FromJson(jsonData);
             Table table;
 
